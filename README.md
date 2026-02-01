@@ -6,7 +6,7 @@ An interactive 3D web experience featuring the BCS AGM logo built with Three.js.
 
 **Background image with 3D** – The interface blends a custom vortex-style background with the interactive 3D model for an immersive visual experience.
 
-![Background with 3D](vortexa%20background.png)
+![Background with 3D](background%20imag%20with%203d.png)
 
 ## Features
 
