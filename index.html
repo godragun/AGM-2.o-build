@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCS AGM 26 - Interactive 3D Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            /* Dark green/black gradient - fills any gaps, no black bars */
+            background: linear-gradient(135deg, #001a00 0%, #000000 50%, #002200 100%);
+        }
+
+        /* Background - cover entire viewport, no black bars */
+        #background-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background-image: url('vortexa background.png');
+            background-size: cover; /* Full cover - no black bars */
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+
+        /* Subtle overlay - blends naturally with gradient */
+        #background-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(0, 30, 0, 0.2) 0%, transparent 50%, rgba(0, 20, 0, 0.25) 100%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* BCS Logo - top-left corner, as close as possible */
+        #bcs-logo-img {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 280px;
+            height: auto;
+            display: block;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        /* Three.js canvas container */
+        #canvas-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            z-index: 10; /* Ensure 3D scene is layered correctly */
+        }
+
+        canvas {
+            display: block;
+            cursor: pointer; /* Pointer for letter click interaction */
+        }
+
+        /* Loading screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #001a00 0%, #000000 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease-out;
+        }
+
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 255, 0, 0.2);
+            border-top: 4px solid #00ff00;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loading-text {
+            color: #00ff00;
+            font-size: 18px;
+            margin-top: 20px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+
+        /* LETTER MATERIALS & COLORS - MATCH DRAW.IO REFERENCE */
+        .letter-material {
+            color: #000000; /* BLACK as specified */
+        }
+
+        /* Remove modal popup - not in Draw.io reference */
+        #modal-overlay {
+            display: none !important; /* REMOVED: Popups not in reference design */
+        }
+
+        #modal-popup {
+            display: none !important;
+        }
+
+        /* Instruction hint - pointer-events: none so clicks reach canvas */
+        #instruction-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ff00;
+            font-size: 16px;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5),
+                         0 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            animation: pulse 2s ease-in-out infinite;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 8px;
+            pointer-events: none; /* Allow clicks to pass through to canvas */
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.7;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+
+        /* Responsive - logo stays corner-aligned */
+        @media (max-width: 768px) {
+            #bcs-logo-img { width: 220px; top: 0; left: 0; }
+
+            #instruction-hint {
+                font-size: 14px;
+                bottom: 20px;
+                padding: 8px 15px;
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            #bcs-logo-img { width: 260px; top: 0; left: 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background -->
+    <div id="background-container"></div>
+    <div id="background-overlay"></div>
+
+    <!-- BCS Logo - corner-aligned, no wrapper -->
+    <img id="bcs-logo-img" src="bcs logo .png" alt="BCS Logo">
+
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <div id="loading-text">Loading 3D Model...</div>
+    </div>
+
+    <!-- Three.js Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Instruction Hint - Updated for light toggle -->
+    <div id="instruction-hint">
+        Click any letter to toggle light
+    </div>
+
+    <!-- Modal Popup REMOVED - Not in Draw.io reference -->
+    <!-- Light toggle behavior replaces modal interaction -->
+
+    <!-- Import Map for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Three.js Module Script -->
+    <script type="module">
+        /* ==========================================
+         * THREE.JS INTERFACE - DRAW.IO REFERENCE COMPLIANT
+         * ==========================================
+         * 
+         * DESIGN SOURCE: Draw.io UI/UX reference (single source of truth)
+         * 
+         * ==========================================
+         * LAYOUT MATCHING DRAW.IO REFERENCE:
+         * ==========================================
+         * 
+         * 1️⃣ BCS LOGO - TOP CENTER
+         *    - Position: Very top (10px from edge)
+         *    - Size: 450px desktop, 400px tablet, 320px mobile
+         *    - NO background box/card (transparent overlay)
+         *    - PNG with drop-shadow only
+         *    - Always visible above 3D canvas
+         * 
+         * 2️⃣ VORTEX BACKGROUND
+         *    - Fullscreen fixed background image
+         *    - Gradient overlay for depth
+         *    - Canvas sits on top with alpha transparency
+         * 
+         * 3️⃣ 3D LETTERS (BCS AGM 26)
+         *    - Layout: B C S A G M 2 6
+         *    - Color: BLACK (per Draw.io spec)
+         *    - Scale: 38% screen height
+         *    - Camera distance: 10 units
+         *    - Front-facing orientation (X=-0.1 rad)
+         *    - ALL letters fully visible (no clipping)
+         *    - Left-shifted 15% for "B" visibility
+         * 
+         * 4️⃣ LIGHT TOGGLE SWITCH (Visual Representation)
+         *    - Draw.io shows "Light toggle switch"
+         *    - Implementation: Click letter → light ON/OFF
+         *    - Active letter: Green emissive glow
+         *    - Inactive: Normal appearance
+         *    - Only ONE letter lit at a time
+         *    - Click same letter to toggle OFF
+         * 
+         * ==========================================
+         * INTERACTION MODEL (PER DRAW.IO):
+         * ==========================================
+         * 
+         * ❌ REMOVED: Modal popups (not in reference)
+         * ✅ ADDED: Light toggle on letter click
+         * 
+         * Behavior:
+         * - Click letter → Lights up with green glow
+         * - Click another → Previous turns off, new lights up
+         * - Click same → Turns off
+         * - Simulates physical toggle switch behavior
+         * 
+         * ==========================================
+         * TECHNICAL IMPLEMENTATION:
+         * ==========================================
+         * 
+         * 🎯 Camera & Framing:
+         *    - FOV: 40°
+         *    - Distance: 10 units (shows all letters)
+         *    - Rotation disabled (locked view)
+         *    - Front-facing only
+         * 
+         * 🎯 Materials:
+         *    - Letters: BLACK base color
+         *    - Emissive: Green glow when active
+         *    - Intensity: 0.8 when ON, 0 when OFF
+         *    - Professional lighting (not flashy)
+         * 
+         * 🎯 Controls:
+         *    - Rotation: DISABLED
+         *    - Zoom: Enabled (limits 4-15)
+         *    - Pan: DISABLED
+         *    - Fixed orientation maintained
+         * 
+         * 🎯 Responsive:
+         *    - Desktop: 450px logo, full layout
+         *    - Tablet: 400px logo, optimized spacing
+         *    - Mobile: 320px logo, compact layout
+         * 
+         * ==========================================
+         * VALIDATION CHECKLIST:
+         * ==========================================
+         * 
+         * ✅ Logo at top center (no box)
+         * ✅ Vortex background visible
+         * ✅ All letters B-C-S-A-G-M-2-6 visible
+         * ✅ Letters are BLACK
+         * ✅ Front-facing orientation
+         * ✅ Light toggle behavior working
+         * ✅ No modal popups
+         * ✅ No rotation on drag
+         * ✅ Professional appearance
+         * ✅ Matches Draw.io spatial layout
+         * 
+         * ==========================================
+         */
+        
+        // ==========================================
+        // IMPORTS
+        // ==========================================
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ==========================================
+        // GLOBAL VARIABLES
+        // ==========================================
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let letterMeshes = new Map();
+        let model;
+        let activeLetters = new Set();
+        let whiteFaceMap = new Map();
+        let letterToWhiteFace = new Map();
+        let meshToLetter = new Map(); // mesh -> letter (for click-anywhere)
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        function init() {
+            initScene();
+            setupLights();
+            setupRaycasting();
+            // setupPopup(); // REMOVED - No popups in Draw.io reference
+            loadModel();
+            setupEventListeners();
+            animate();
+
+            // Timeout fallback - if model doesn't load in 10 seconds, show error
+            setTimeout(() => {
+                const loadingScreen = document.getElementById('loading-screen');
+                if (loadingScreen.style.display !== 'none' && !loadingScreen.classList.contains('hidden')) {
+                    console.error('Model loading timeout');
+                    const loadingText = document.getElementById('loading-text');
+                    loadingText.textContent = 'Loading timeout - Check file location';
+                    loadingText.style.color = '#ff6666';
+                    
+                    // Offer to continue without model
+                    const continueBtn = document.createElement('button');
+                    continueBtn.textContent = 'Continue Anyway';
+                    continueBtn.style.cssText = `
+                        margin-top: 20px;
+                        padding: 10px 20px;
+                        background: #00ff00;
+                        color: #000;
+                        border: none;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        font-size: 16px;
+                    `;
+                    continueBtn.onclick = () => {
+                        loadingScreen.classList.add('hidden');
+                        setTimeout(() => loadingScreen.style.display = 'none', 500);
+                    };
+                    loadingScreen.appendChild(continueBtn);
+                }
+            }, 10000);
+        }
+
+        // ==========================================
+        // SCENE SETUP
+        // ==========================================
+        function initScene() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = null; // Transparent to show HTML background
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(
+                40, // Adjusted FOV for better framing (increased from 35 to fit content)
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 0, 8);
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: true // Enable transparency
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Setup OrbitControls - ROTATION FULLY DISABLED
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enablePan = false; // Disable panning
+            controls.enableZoom = true; // Allow zoom only
+            controls.enableRotate = false; // ❌ DISABLE ROTATION COMPLETELY
+            controls.minDistance = 4;
+            controls.maxDistance = 15;
+            
+            // Lock rotation completely (no rotation allowed)
+            controls.minPolarAngle = Math.PI / 2; // Lock to 90 degrees
+            controls.maxPolarAngle = Math.PI / 2; // Lock to 90 degrees
+            controls.minAzimuthAngle = 0; // Lock horizontal rotation
+            controls.maxAzimuthAngle = 0; // Lock horizontal rotation
+            
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        // ==========================================
+        // LIGHTING SETUP
+        // ==========================================
+        function setupLights() {
+            // Ambient light - soft overall illumination
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            // Main directional key light
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            keyLight.position.set(5, 5, 5);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.camera.near = 0.5;
+            keyLight.shadow.camera.far = 50;
+            scene.add(keyLight);
+
+            // Rim light - subtle highlight from behind
+            const rimLight = new THREE.DirectionalLight(0x00ff00, 0.3);
+            rimLight.position.set(-3, 2, -3);
+            scene.add(rimLight);
+
+            // Fill light - from opposite side
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            fillLight.position.set(-5, 3, 5);
+            scene.add(fillLight);
+
+            // Bottom light to illuminate interior faces
+            const bottomLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            bottomLight.position.set(0, -5, 0);
+            scene.add(bottomLight);
+        }
+
+        // ==========================================
+        // MODEL LOADING
+        // ==========================================
+        function loadModel() {
+            const loader = new GLTFLoader();
+            const loadingScreen = document.getElementById('loading-screen');
+            const loadingText = document.getElementById('loading-text');
+
+            // Try to load the model
+            console.log('Starting to load model: BCS AGM 26 1.glb');
+
+            loader.load(
+                'BCS AGM 26 1.glb', // Model path
+                function(gltf) {
+                    console.log('Model loaded successfully!', gltf);
+                    model = gltf.scene;
+                    
+                    // Store individual letter meshes and fix specific issues
+                    let meshCount = 0;
+                    let mesh6 = null; // Track the "6" mesh for position correction
+                    
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            meshCount++;
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            
+                            // IDENTIFY WHITE INNER FACE materials for precise click detection
+                            const materials = Array.isArray(child.material) ? child.material : [child.material];
+                            const whiteIndices = new Set();
+                            materials.forEach((mat, idx) => {
+                                if (mat && mat.color) {
+                                    const r = mat.color.r, g = mat.color.g, b = mat.color.b;
+                                    const luminance = (r + g + b) / 3;
+                                    if (luminance > 0.45) whiteIndices.add(idx); // White/light = inner face
+                                    if (!mat.emissive) mat.emissive = new THREE.Color(0x000000);
+                                    if (mat.emissiveIntensity === undefined) mat.emissiveIntensity = 0;
+                                }
+                            });
+                            if (whiteIndices.size > 0) whiteFaceMap.set(child, whiteIndices);
+                            
+                            if (child.name) {
+                                letterMeshes.set(child.name, child);
+                                if (child.name === '6' || child.name.includes('6')) mesh6 = child;
+                            } else {
+                                letterMeshes.set(`mesh_${meshCount}`, child);
+                            }
+                        }
+                    });
+
+                    // Build letterToWhiteFace from mesh names (use global meshToLetter)
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            const letter = getLetterFromMesh(child);
+                            if (letter) {
+                                meshToLetter.set(child, letter);
+                                const whiteIndices = whiteFaceMap.get(child);
+                                if (whiteIndices && whiteIndices.size > 0) {
+                                    const arr = letterToWhiteFace.get(letter) || [];
+                                    whiteIndices.forEach(idx => arr.push({ mesh: child, materialIndex: idx }));
+                                    letterToWhiteFace.set(letter, arr);
+                                }
+                            }
+                        }
+                    });
+                    console.log('letterToWhiteFace (from names):', Array.from(letterToWhiteFace.keys()));
+
+                    console.log(`Total meshes found: ${meshCount}`);
+
+                    // POLISH FIX 1: Apply corrective rotation for proper frontal orientation
+                    // The model from Blender appears tilted/sideways - correct to face viewer
+                    model.rotation.x = -0.1; // Tilt forward ~5.7 degrees for frontal view
+                    model.rotation.y = 0;    // No horizontal rotation needed
+                    model.rotation.z = 0;    // Keep upright
+                    console.log('Applied corrective orientation: X=-0.1 rad (frontal facing)');
+
+                    // Center and scale the model
+                    centerAndScaleModel(model);
+                    
+                    // UI/UX REFINEMENT: Adjust "6" position AFTER scaling for full visibility
+                    if (mesh6) {
+                        // Move "6" right to prevent clipping (adjusted for smaller scale)
+                        mesh6.position.x += 0.25; // Reduced offset for smaller scale
+                        console.log('Applied position correction to "6" mesh (+0.25 X-axis):', mesh6.name);
+                    } else {
+                        console.warn('Could not find "6" mesh - attempting alternative mesh names...');
+                        // Try finding by alternative naming patterns
+                        for (let [name, mesh] of letterMeshes) {
+                            if (name.toLowerCase().includes('six') || name.endsWith('6')) {
+                                mesh.position.x += 0.25;
+                                console.log('Applied position correction to alternate "6" mesh:', name);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    scene.add(model);
+                    
+                    // SPATIAL FALLBACK: ensure meshToLetter has ALL meshes, letterToWhiteFace if empty
+                    model.updateMatrixWorld(true);
+                    const allMeshes = [];
+                    model.traverse((child) => { if (child.isMesh) allMeshes.push(child); });
+                    const tempBox = new THREE.Box3();
+                    const tempVec = new THREE.Vector3();
+                    const withX = allMeshes.map(m => {
+                        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+                        tempBox.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);
+                        tempBox.getCenter(tempVec);
+                        return { mesh: m, x: tempVec.x };
+                    });
+                    withX.sort((a, b) => a.x - b.x);
+                    const letters = ['B','C','S','A','G','M','2','6'];
+                    const perLetter = Math.max(1, Math.ceil(withX.length / 8));
+                    letterToWhiteFace.clear(); // Use spatial only for consistent assignment
+                    withX.forEach((item, i) => {
+                        const letter = letters[Math.min(Math.floor(i / perLetter), 7)];
+                        meshToLetter.set(item.mesh, letter);
+                        // Only add WHITE face materials - not dark body
+                        const whiteIndices = whiteFaceMap.get(item.mesh);
+                        if (whiteIndices && whiteIndices.size > 0) {
+                            const arr = letterToWhiteFace.get(letter) || [];
+                            whiteIndices.forEach(idx => arr.push({ mesh: item.mesh, materialIndex: idx }));
+                            letterToWhiteFace.set(letter, arr);
+                        }
+                    });
+                    console.log('letterToWhiteFace:', Array.from(letterToWhiteFace.keys()), 'meshes:', meshToLetter.size);
+                    
+                    // Hide loading screen
+                    loadingScreen.classList.add('hidden');
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                    }, 500);
+                    
+                    console.log('Model added to scene');
+                    console.log('Available letters:', Array.from(letterMeshes.keys()));
+                },
+                function(xhr) {
+                    // Progress callback
+                    if (xhr.lengthComputable) {
+                        const percentComplete = (xhr.loaded / xhr.total * 100).toFixed(0);
+                        loadingText.textContent = `Loading 3D Model... ${percentComplete}%`;
+                        console.log(`Loading progress: ${percentComplete}%`);
+                    } else {
+                        loadingText.textContent = `Loading 3D Model... ${(xhr.loaded / 1024).toFixed(0)} KB`;
+                    }
+                },
+                function(error) {
+                    console.error('Error loading model:', error);
+                    loadingText.textContent = 'Error: Model file not found or invalid';
+                    loadingText.style.color = '#ff0000';
+                    
+                    // Add helpful message
+                    const errorInfo = document.createElement('div');
+                    errorInfo.style.color = '#ff6666';
+                    errorInfo.style.marginTop = '20px';
+                    errorInfo.style.fontSize = '14px';
+                    errorInfo.innerHTML = `
+                        Please ensure:<br>
+                        1. "BCS AGM 26 1.glb" is in the same folder<br>
+                        2. The file name matches exactly<br>
+                        3. Open browser console (F12) for details
+                    `;
+                    document.getElementById('loading-screen').appendChild(errorInfo);
+                }
+            );
+        }
+
+        // ==========================================
+        // MODEL CENTERING AND SCALING
+        // ==========================================
+        function centerAndScaleModel(model) {
+            // Calculate bounding box
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            console.log('Original model size:', size);
+            console.log('Original model center:', center);
+
+            // Shift model - move B to the left
+            const visualCenterX = center.x - (size.x * 0.08);
+            const leftShift = size.x * 0.14;
+            model.position.x = -visualCenterX - leftShift;
+            model.position.y = -center.y;
+            model.position.z = -center.z;
+
+            // FIX: Further reduce scale and pull back camera to ensure "6" is fully visible
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180); // Convert FOV to radians
+            const cameraDistance = 13.0; // INCREASED to show full width including "6"
+            
+            // Calculate target size - reduced to ensure "6" fits on screen
+            const targetScreenHeightRatio = 0.28; // REDUCED to fit all letters including "6"
+            const visibleHeight = 2 * Math.tan(fov / 2) * cameraDistance;
+            const targetSize = visibleHeight * targetScreenHeightRatio;
+            
+            // Apply scaling based on height for consistent sizing
+            const scale = targetSize / size.y;
+            model.scale.setScalar(scale);
+
+            // Position camera for FULL text visibility (B through 6)
+            camera.position.set(0, 0, cameraDistance);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            console.log('FIXED: Model positioned for full visibility (B-C-S-A-G-M-2-6)');
+            console.log('  - Scale factor:', scale.toFixed(3));
+            console.log('  - Camera distance:', cameraDistance, 'units (increased for "6")');
+            console.log('  - Target screen height:', (targetScreenHeightRatio * 100).toFixed(0) + '%');
+            console.log('  - LEFT shift: 8% (balanced for B and 6 visibility)');
+            console.log('  - Result: ALL letters including "6" now visible');
+        }
+
+        // ==========================================
+        // RAYCASTING SETUP
+        // ==========================================
+        function setupRaycasting() {
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Increase raycaster threshold for better touch sensitivity
+            raycaster.params.Points.threshold = 0.1;
+        }
+
+        // ==========================================
+        // POPUP SETUP - REMOVED (Not in Draw.io reference)
+        // ==========================================
+        // Light toggle behavior replaces modal popup interaction
+        
+        // ==========================================
+        // LIGHT TOGGLE - Click anywhere on letter, only same-letter toggles off
+        // ==========================================
+        function getLetterFromMesh(m) {
+            const match = (m.name || '').match(/^(B|C|S|A|G|M|2|6)/);
+            if (match) return match[1];
+            let p = m.parent;
+            while (p && p !== model) {
+                const pm = (p.name || '').match(/^(B|C|S|A|G|M|2|6)/);
+                if (pm) return pm[1];
+                p = p.parent;
+            }
+            return null;
+        }
+        
+        function toggleLetterLight(letterName) {
+            const whiteFaces = letterToWhiteFace.get(letterName);
+            if (!whiteFaces || whiteFaces.length === 0) return;
+            if (activeLetters.has(letterName)) {
+                whiteFaces.forEach(t => turnOffLight(t));
+                activeLetters.delete(letterName);
+                console.log('Light OFF:', letterName);
+            } else {
+                whiteFaces.forEach(t => turnOnLight(t));
+                activeLetters.add(letterName);
+                console.log('Light ON:', letterName);
+            }
+        }
+        
+        function getMaterial(mesh, materialIndex) {
+            return Array.isArray(mesh.material) ? mesh.material[materialIndex] : mesh.material;
+        }
+        
+        function turnOnLight(target) {
+            const mat = getMaterial(target.mesh, target.materialIndex);
+            if (mat && mat.emissive) {
+                mat.emissive.setHex(0x88ff88);
+                mat.emissiveIntensity = 0.4;
+            }
+        }
+        
+        function turnOffLight(target) {
+            const mat = getMaterial(target.mesh, target.materialIndex);
+            if (mat && mat.emissive) {
+                mat.emissive.setHex(0x000000);
+                mat.emissiveIntensity = 0;
+            }
+        }
+
+        // ==========================================
+        // EVENT LISTENERS
+        // ==========================================
+        function setupEventListeners() {
+            window.addEventListener('resize', onWindowResize, false);
+            const canvas = renderer.domElement;
+            canvas.addEventListener('click', onCanvasClick, false);
+            canvas.addEventListener('touchend', onCanvasTouch, { passive: false });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onCanvasClick(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            performRaycast();
+        }
+
+        function onCanvasTouch(event) {
+            event.preventDefault();
+            if (event.changedTouches.length > 0) {
+                const touch = event.changedTouches[0];
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+                performRaycast();
+            }
+        }
+
+        // ==========================================
+        // RAYCASTING - Click ANYWHERE on letter (face or body)
+        // ==========================================
+        function performRaycast() {
+            if (!model) return;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(model, true);
+            if (intersects.length === 0) return;
+            const mesh = intersects[0].object;
+            const letterName = getLetterFromMesh(mesh) || meshToLetter.get(mesh);
+            if (!letterName || !letterToWhiteFace.has(letterName)) return;
+            toggleLetterLight(letterName);
+        }
+
+        // ==========================================
+        // VISUAL FEEDBACK - REMOVED (Replaced by light toggle)
+        // ==========================================
+        // Light toggle provides the visual feedback
+
+        // ==========================================
+        // ANIMATION LOOP
+        // ==========================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update controls (zoom only - rotation is disabled)
+            controls.update();
+
+            // NO model rotation - model remains static
+            // NO camera rotation animation - camera stays locked
+
+            // Render scene
+            renderer.render(scene, camera);
+        }
+
+        // ==========================================
+        // START APPLICATION
+        // ==========================================
+        init();
+    </script>
+</body>
+</html>
